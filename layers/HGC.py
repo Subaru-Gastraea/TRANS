@@ -13,7 +13,7 @@ from torch_geometric.nn.module_dict import ModuleDict
 from torch_geometric.nn.parameter_dict import ParameterDict
 from torch_geometric.typing import EdgeType, Metadata, NodeType, SparseTensor
 from torch_geometric.utils import softmax
-from TSEncoder import TimeEncode
+from layers.TSEncoder import TimeEncode
 
 def group(xs: List[Tensor], aggr: Optional[str]) -> Optional[Tensor]:
     if len(xs) == 0:

@@ -6,16 +6,19 @@ import numpy as np
 from joblib import dump, load
 import torch
 import torch.optim as optim
-from utils import *
+from TRANS_utils import *
 from data.Task import *
 from models.Model import *
 from models.baselines import *
+
+import pathlib
+import pickle
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--epochs', type=int, default=100, help = 'Number of epochs to train.')
 parser.add_argument('--lr', type=float, default = 0.001, help = 'learning rate.')
 parser.add_argument('--model', type=str, default="TRANS", help = 'Transformer, RETAIN, StageNet, KAME, GCT, DDHGNN, TRANS')
-parser.add_argument('--dev', type=int, default = 7)
+parser.add_argument('--dev', type=int, default = 0, help = 'GPU device id')
 parser.add_argument('--seed', type=int, default = 42)
 parser.add_argument('--dataset', type=str, default = "mimic3", choices=['mimic3', 'mimic4', 'ccae'])
 parser.add_argument('--batch_size', type=int, default = 128)
@@ -39,14 +42,41 @@ cudaid = "cuda:"+str(args.dev)
 device = torch.device(cudaid if torch.cuda.is_available() else "cpu")
 
 if args.dataset == 'mimic4':
-   task_dataset = load_dataset(args.dataset, root = fileroot[args.dataset], task_fn=diag_prediction_mimic4_fn, dev= args.devm)
+    # Our preprocessed sample dataset
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+    sample_dataset_path = pathlib.Path(project_root) / 'dataset/preprocessed_data/sample_dataset.pkl'
+
+    if os.path.exists(sample_dataset_path):
+        with open(sample_dataset_path, 'rb') as f:
+            task_dataset = pickle.load(f)
+
+#    task_dataset = load_dataset(args.dataset, root = fileroot[args.dataset], task_fn=diag_prediction_mimic4_fn, dev= args.devm)
 elif args.dataset == 'mimic3':
    task_dataset = load_dataset(args.dataset, root = fileroot[args.dataset], task_fn=diag_prediction_mimic3_fn, dev= args.devm)
 else:
     task_dataset = load_dataset(args.dataset, root = fileroot[args.dataset])
- 
-Tokenizers = get_init_tokenizers(task_dataset)
-label_tokenizer = Tokenizer(tokens=task_dataset.get_all_tokens('conditions'))
+
+# print(task_dataset.input_info)
+# print(task_dataset.samples[0]['lab_itemid'])
+# exit()
+
+# Overwrite the input_info to fix task_dataset.get_all_tokens()
+task_dataset.input_info['lab_itemid']['type'] = str
+task_dataset.input_info['lab_itemid']['dim'] = 3
+
+for sample in task_dataset.samples:
+    sample['labels'] = sample['labels'].index(1)
+task_dataset.input_info['labels']['type'] = str
+task_dataset.input_info['labels']['dim'] = 0     
+
+# print(task_dataset.input_info)
+# exit()
+
+Tokenizers = get_init_tokenizers(task_dataset, keys=['lab_itemid'])
+label_tokenizer = Tokenizer(tokens=task_dataset.get_all_tokens('labels'))
+
+# =========
+
 if args.model == 'Transformer':
     train_loader , val_loader, test_loader = seq_dataloader(task_dataset, batch_size = args.batch_size)
     model  = Transformer(Tokenizers,len(task_dataset.get_all_tokens('conditions')),device)
@@ -67,13 +97,18 @@ elif args.model == 'StageNet':
 elif args.model == 'TRANS':
     data_path = './logs/{}_{}.pkl'.format(args.dataset, args.pe_dim)
     if os.path.exists(data_path):
+        print('Loading preprocessed data from {}'.format(data_path))
         mdataset = load(data_path)
+        print('Loaded preprocessed data with {} samples'.format(len(mdataset)))
     else:
         mdataset = MMDataset(task_dataset,Tokenizers, dim = 128, device = device, trans_dim=args.pe_dim)
         dump(mdataset,data_path)
     trainset, validset, testset = split_dataset(mdataset)
     train_loader , val_loader, test_loader = mm_dataloader(trainset, validset, testset, batch_size=args.batch_size)
-    model = TRANS(Tokenizers, 128, len(task_dataset.get_all_tokens('conditions')),
+    
+    # print('task_dataset.get_all_tokens("labels"):', task_dataset.get_all_tokens('labels'))
+    
+    model = TRANS(Tokenizers, 128, len(task_dataset.get_all_tokens('labels')),
                     device,graph_meta=graph_meta, pe=args.pe_dim)
     
 ckptpath = './logs/trained_{}_{}.ckpt'.format(args.model, args.dataset)

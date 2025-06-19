@@ -2,7 +2,7 @@ import torch
 import torch.nn as  nn
 import math
 from typing import Optional,  Tuple, List
-from Seqmodels import *
+from models.Seqmodels import *
 from pyhealth.medcode import InnerMap
 from torch.nn.utils.rnn import pack_padded_sequence, unpack_sequence
 

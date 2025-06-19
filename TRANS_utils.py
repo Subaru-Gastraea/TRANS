@@ -38,7 +38,7 @@ def prepare_labels(
 
 def parse_datetimes(datetime_strings):
     # print(datetime_strings)
-    return [datetime.strptime(dt_str, "%Y-%m-%d %H:%M") for dt_str in datetime_strings]
+    return [datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S") for dt_str in datetime_strings]
 
 def timedelta_to_str(tdelta):
     days = tdelta.days
@@ -177,9 +177,9 @@ def train(data_loader, model, label_tokenizer, optimizer, device):
         model.train()
         optimizer.zero_grad()
         if type(data)==dict:
-            label = prepare_labels(data['conditions'],label_tokenizer).to(device)
+            label = prepare_labels(data['labels'],label_tokenizer).to(device)
         else:
-            label = prepare_labels(data[0]['conditions'],label_tokenizer).to(device)
+            label = prepare_labels(data[0]['labels'],label_tokenizer).to(device)
         out = model(data)
         loss = F.binary_cross_entropy_with_logits(out,label)
         # y_prob = torch.sigmoid(out)

@@ -1,5 +1,5 @@
-from HGT import *
-from Seqmodels import *
+from models.HGT import *
+from models.Seqmodels import *
 from layers.TSEncoder import *
 import torch
 import torch.nn as nn
@@ -14,14 +14,19 @@ feats_to_nodes = {
     'dh': 'drugs'
 }
 
-graph_meta = (['visit', 'co', 'pr', 'dh'],
- [('co', 'in', 'visit'),
-  ('pr', 'in', 'visit'),
-  ('dh', 'in', 'visit'),
+# graph_meta = (['visit', 'co', 'pr', 'dh'],
+#  [('co', 'in', 'visit'),
+#   ('pr', 'in', 'visit'),
+#   ('dh', 'in', 'visit'),
+#   ('visit', 'connect', 'visit'),
+#   ('visit', 'has', 'co'),
+#   ('visit', 'has', 'pr'),
+#   ('visit', 'has', 'dh')])
+
+graph_meta = (['visit', 'lab'],
+ [('lab', 'in', 'visit'),
   ('visit', 'connect', 'visit'),
-  ('visit', 'has', 'co'),
-  ('visit', 'has', 'pr'),
-  ('visit', 'has', 'dh')])
+  ('visit', 'has', 'lab')])
 
 class TRANS(nn.Module):
     def __init__(

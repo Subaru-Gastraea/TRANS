@@ -1,6 +1,6 @@
 from pyhealth.data import  Patient
 from torch.utils.data import  Dataset
-from GraphConstruction import *
+from data.GraphConstruction import *
 from tqdm import *
 from pyhealth.medcode import CrossMap
 mapping = CrossMap("ICD10CM", "CCSCM")

@@ -5,13 +5,18 @@ import torch
 import torch.nn as nn
 from torch_geometric.data import Batch
 
+# feats_to_nodes = {
+#     'cond_hist': 'co',
+#     'procedures': 'pr',
+#     'drugs': 'dh',
+#     'co': 'cond_hist',
+#     'pr': 'procedures',
+#     'dh': 'drugs'
+# }
+
 feats_to_nodes = {
-    'cond_hist': 'co',
-    'procedures': 'pr',
-    'drugs': 'dh',
-    'co': 'cond_hist',
-    'pr': 'procedures',
-    'dh': 'drugs'
+    'lab_itemid': 'lab',
+    'lab': 'lab_itemid'
 }
 
 # graph_meta = (['visit', 'co', 'pr', 'dh'],
@@ -62,8 +67,9 @@ class TRANS(nn.Module):
         self.graphmodel = HGT(hidden_channels = hidden_size, out_channels = output_size, num_heads=num_heads, num_layers = num_layers, metadata = graph_meta).to(device)
         self.pe = pe
         self.spatialencoder = nn.ModuleDict()
-        for feature_key in self.feature_keys:
-            self.spatialencoder[feature_key] = nn.Linear(self.pe*2, embedding_dim)#.to(self.device)
+        if self.pe:
+            for feature_key in self.feature_keys:
+                self.spatialencoder[feature_key] = nn.Linear(self.pe*2, embedding_dim)#.to(self.device)
         self.alpha = 0.8
 
     def add_feature_transform_layer(self, feature_key: str):

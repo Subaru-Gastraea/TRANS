@@ -29,11 +29,15 @@ def prepare_labels(
         labels,
         label_tokenizer: Tokenizer,
     ) -> torch.Tensor:
-    labels_index = label_tokenizer.batch_encode_2d(
-        labels, padding=False, truncation=False
-    )
+    # labels_index = label_tokenizer.batch_encode_2d(
+    #     labels, padding=False, truncation=False
+    # )
     num_labels = label_tokenizer.get_vocabulary_size()
-    labels = batch_to_multihot(labels_index, num_labels)
+    # print("labels:", labels)
+    # print(f"Number of labels: {num_labels}")
+    labels = batch_to_multihot(labels, num_labels)
+    # print("onehot labels:", labels)
+    # exit()
     return labels
 
 def parse_datetimes(datetime_strings):
@@ -118,13 +122,18 @@ def custom_collate_fn(batch):
     return sequence_data_batch, graph_data_batch
 
 
-def mm_dataloader(trainset, validset, testset, batch_size = 64):
+# def mm_dataloader(trainset, validset, testset, batch_size = 64):
+#     train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True, collate_fn=custom_collate_fn)
+#     val_loader = DataLoader(validset, batch_size=batch_size, shuffle=True, collate_fn=custom_collate_fn)
+#     test_loader = DataLoader(testset, batch_size=batch_size, shuffle=True, collate_fn=custom_collate_fn)
+ 
+#     return train_loader, val_loader, test_loader 
+
+def mm_dataloader(trainset, testset, batch_size = 64):
     train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True, collate_fn=custom_collate_fn)
-    val_loader = DataLoader(validset, batch_size=batch_size, shuffle=True, collate_fn=custom_collate_fn)
     test_loader = DataLoader(testset, batch_size=batch_size, shuffle=True, collate_fn=custom_collate_fn)
  
-    return train_loader, val_loader, test_loader 
-
+    return train_loader, test_loader 
 
 
 def seq_dataloader(dataset, split_ratio = [0.75, 0.1, 0.15], batch_size = 64):
@@ -181,7 +190,7 @@ def train(data_loader, model, label_tokenizer, optimizer, device):
         else:
             label = prepare_labels(data[0]['labels'],label_tokenizer).to(device)
         out = model(data)
-        loss = F.binary_cross_entropy_with_logits(out,label)
+        loss = F.cross_entropy(out,label)
         # y_prob = torch.sigmoid(out)
         loss.backward()
         optimizer.step()
@@ -208,15 +217,20 @@ def test(data_loader, model, label_tokenizer):
     with torch.no_grad():
         for data in tqdm(data_loader):
             model.eval()
-            if type(data)==dict:
-                label = prepare_labels(data['conditions'],label_tokenizer)
+            if type(data) == dict:
+                # label = prepare_labels(data['labels'], label_tokenizer)
+                label = data['labels']
             else:
-                label = prepare_labels(data[0]['conditions'],label_tokenizer)
+                # label = prepare_labels(data[0]['labels'], label_tokenizer)
+                label = data[0]['labels']
             out = model(data)
-            y_t = label.cpu().numpy()
-            y_p = torch.sigmoid(out).detach().cpu().numpy()
+            # For multi-label single-choice: use softmax and argmax per label
+            y_t = label
+            y_p = torch.softmax(out, dim=1).detach().cpu().numpy()
             y_t_all.append(y_t)
             y_p_all.append(y_p)
         y_true = np.concatenate(y_t_all, axis=0)
         y_prob = np.concatenate(y_p_all, axis=0)
-    return y_true, y_prob
+        # For prediction, take argmax for each sample (single label per sample)
+        y_pred = np.argmax(y_prob, axis=1)
+    return y_true, y_pred, y_prob

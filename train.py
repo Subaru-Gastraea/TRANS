@@ -14,6 +14,18 @@ from models.baselines import *
 import pathlib
 import pickle
 
+from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+import sys
+
+# Add the parent directory to sys.path
+# Executing path: ddx-on-ehr/models/sub2vec/
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))  # ddx-on-ehr/
+from utils.graph_proc import set_train_test_samples
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--epochs', type=int, default=100, help = 'Number of epochs to train.')
 parser.add_argument('--lr', type=float, default = 0.001, help = 'learning rate.')
@@ -95,50 +107,112 @@ elif args.model == 'StageNet':
     model  = StageNet(Tokenizers, len(task_dataset.get_all_tokens('conditions')), device)
 
 elif args.model == 'TRANS':
-    data_path = './logs/{}_{}.pkl'.format(args.dataset, args.pe_dim)
-    if os.path.exists(data_path):
-        print('Loading preprocessed data from {}'.format(data_path))
-        mdataset = load(data_path)
-        print('Loaded preprocessed data with {} samples'.format(len(mdataset)))
-    else:
-        mdataset = MMDataset(task_dataset,Tokenizers, dim = 128, device = device, trans_dim=args.pe_dim)
-        dump(mdataset,data_path)
-    trainset, validset, testset = split_dataset(mdataset)
-    train_loader , val_loader, test_loader = mm_dataloader(trainset, validset, testset, batch_size=args.batch_size)
+    train_data_path = './logs/train_{}_{}.pkl'.format(args.dataset, args.pe_dim)
+    test_data_path = './logs/test_{}_{}.pkl'.format(args.dataset, args.pe_dim)
     
+    if not os.path.exists(train_data_path) or not os.path.exists(test_data_path):
+        train_samples, test_samples = set_train_test_samples(sample_dataset=task_dataset, dev=False, test_size=0.25, split_seed=42, split=True)
+
+        if os.path.exists(train_data_path):
+            print('Loading preprocessed data from {}'.format(train_data_path))
+            trainset = load(train_data_path)
+            print('Loaded preprocessed data with {} samples'.format(len(trainset)))
+        else:
+            trainset = MMDataset(train_samples, Tokenizers, dim = 128, device = device, trans_dim=args.pe_dim)
+            print('Saving preprocessed data to {}'.format(train_data_path))
+            dump(trainset,train_data_path)
+
+        if os.path.exists(test_data_path):
+            print('Loading preprocessed data from {}'.format(test_data_path))
+            testset = load(test_data_path)
+            print('Loaded preprocessed data with {} samples'.format(len(testset)))
+        else:
+            testset = MMDataset(test_samples, Tokenizers, dim = 128, device = device, trans_dim=args.pe_dim)
+            print('Saving preprocessed data to {}'.format(test_data_path))
+            dump(testset,test_data_path)
+    else:
+        print('Loading preprocessed data from {} and {}'.format(train_data_path, test_data_path))
+        trainset = load(train_data_path)
+        testset = load(test_data_path)
+        print('Loaded preprocessed data with {} train samples and {} test samples'.format(len(trainset), len(testset)))
+
+        # dump(trainset[:1000], './logs/train_{}_{}_1000.pkl'.format(args.dataset, args.pe_dim))
+        # dump(testset[:250], './logs/test_{}_{}_250.pkl'.format(args.dataset, args.pe_dim))
+
+    # trainset, validset, testset = split_dataset(mdataset)
+    # train_loader , val_loader, test_loader = mm_dataloader(trainset, validset, testset, batch_size=args.batch_size)
+    train_loader, test_loader = mm_dataloader(trainset, testset, batch_size=args.batch_size)
+
     # print('task_dataset.get_all_tokens("labels"):', task_dataset.get_all_tokens('labels'))
     
     model = TRANS(Tokenizers, 128, len(task_dataset.get_all_tokens('labels')),
                     device,graph_meta=graph_meta, pe=args.pe_dim)
-    
-ckptpath = './logs/trained_{}_{}.ckpt'.format(args.model, args.dataset)
+
+ckptpath = './logs/trained_{}_{}.ckpt'.format(args.model, args.dataset)    ###
 optimizer =torch.optim.AdamW(model.parameters(), lr = args.lr)
 best = 12345
 pbar = tqdm(range(args.epochs))
-for epoch in pbar:
-    model = model.to(device)
 
-    train_loss = train(train_loader, model, label_tokenizer, optimizer, device)
-    val_loss = valid(val_loader, model, label_tokenizer, device)
+if os.path.exists(ckptpath):
+    print(f"Checkpoint {ckptpath} exists, skipping training.")
+else:
+    print(f"Checkpoint {ckptpath} does not exist, starting training.")
+    for epoch in pbar:
+        model = model.to(device)
 
-    pbar.set_description(f"Epoch {epoch + 1}/{args.epochs} - train loss: {train_loss:.2f} - valid loss: {val_loss:.2f}")
-    if val_loss<best:
-        torch.save(model.state_dict(), ckptpath)
+        train_loss = train(train_loader, model, label_tokenizer, optimizer, device)
+        # val_loss = valid(val_loader, model, label_tokenizer, device)
+
+        # pbar.set_description(f"Epoch {epoch + 1}/{args.epochs} - train loss: {train_loss:.2f} - valid loss: {val_loss:.2f}")
+        # if val_loss<best:
+        #     torch.save(model.state_dict(), ckptpath)
+
+        pbar.set_description(f"Epoch {epoch + 1}/{args.epochs} - train loss: {train_loss:.2f}")
+        if train_loss<best:
+            torch.save(model.state_dict(), ckptpath)
 
 #for limited gpu memory
 if args.model == 'TRANS':
     del model
     torch.cuda.empty_cache()
     import gc
+
     gc.collect()
     device = torch.device('cpu')
-    model = TRANS(Tokenizers, 128, len(task_dataset.get_all_tokens('conditions')),
+    model = TRANS(Tokenizers, 128, len(task_dataset.get_all_tokens('labels')),
                 device, graph_meta=graph_meta, pe=args.pe_dim)
-best_model = torch.load(ckptpath)
-model.load_state_dict(best_model)
+best_model = torch.load(ckptpath, weights_only=True)    # weights_only=True : 只載入權重，避免安全警告
+model.load_state_dict(best_model, strict=False)     # strict=False : 忽略多餘或缺少的權重
 model = model.to(device)
 
 y_t_all, y_p_all = [], []
-y_true, y_prob = test(test_loader, model, label_tokenizer)
-print(code_level(y_true, y_prob))
-print(visit_level(y_true, y_prob))
+y_true, y_pred, y_prob = test(test_loader, model, label_tokenizer)
+y_true = np.array(y_true)
+y_pred = np.array(y_pred)
+
+labels = task_dataset.get_all_tokens('labels')
+
+report = classification_report(y_true, y_pred, labels=labels, digits=4, zero_division=0)
+conf_matrix = confusion_matrix(y_true, y_pred, labels=labels)
+
+print("Classification Report:\n", report)
+print("Confusion Matrix:\n", conf_matrix)
+
+# Save reports
+result_path = pathlib.Path("./result/{}_{}_{}".format(args.model, args.dataset, args.pe_dim))
+result_path.mkdir(parents=True, exist_ok=True)
+with open(result_path / "classification_report.txt", "w") as f:
+    f.write("Classification Report:\n")
+    f.write(report)
+
+# Plot confusion matrix
+plt.figure(figsize=(6, 4))
+sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", xticklabels=labels, yticklabels=labels)
+plt.title("Confusion Matrix")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.tight_layout()
+plt.savefig(result_path / "confusion_matrix.png")
+
+# print(code_level(y_true, y_prob))
+# print(visit_level(y_true, y_prob))

@@ -116,8 +116,8 @@ def diag_prediction_mimic3_fn(patient: Patient):
 
 
 class MMDataset(Dataset):
-    def __init__(self, dataset, tokenizer, dim, device, trans_dim=0, di=False):
-        self.sequence_dataset = dataset.samples
+    def __init__(self, samples, tokenizer, dim, device, trans_dim=0, di=False):
+        self.sequence_dataset = samples
         self.tokenizer = tokenizer
         self.trans_dim = trans_dim
         self.di = di

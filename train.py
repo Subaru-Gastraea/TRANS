@@ -24,7 +24,7 @@ import sys
 # Add the parent directory to sys.path
 # Executing path: ddx-on-ehr/models/sub2vec/
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))  # ddx-on-ehr/
-from utils.graph_proc import set_train_test_samples
+from utils.graph_proc import set_train_test_samples, time_slice_samples
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--epochs', type=int, default=100, help = 'Number of epochs to train.')
@@ -37,6 +37,7 @@ parser.add_argument('--batch_size', type=int, default = 128)
 parser.add_argument('--pe_dim', type=int, default = 4, help = 'dimensions of spatial encoding')
 parser.add_argument('--devm', type=bool, default = False, help = 'develop mode')
 
+parser.add_argument('--time_slice_pct', type=float, default=1.0, help='Percentage of time for slicing test samples')
 
 fileroot = {
    'mimic3': 'data path of mimic3',
@@ -87,8 +88,6 @@ task_dataset.input_info['labels']['dim'] = 0
 Tokenizers = get_init_tokenizers(task_dataset, keys=['lab_itemid'])
 label_tokenizer = Tokenizer(tokens=task_dataset.get_all_tokens('labels'))
 
-# =========
-
 if args.model == 'Transformer':
     train_loader , val_loader, test_loader = seq_dataloader(task_dataset, batch_size = args.batch_size)
     model  = Transformer(Tokenizers,len(task_dataset.get_all_tokens('conditions')),device)
@@ -108,7 +107,7 @@ elif args.model == 'StageNet':
 
 elif args.model == 'TRANS':
     train_data_path = './logs/train_{}_{}.pkl'.format(args.dataset, args.pe_dim)
-    test_data_path = './logs/test_{}_{}.pkl'.format(args.dataset, args.pe_dim)
+    test_data_path = './logs/test_{}_{}_{}.pkl'.format(args.dataset, args.pe_dim, args.time_slice_pct)
     
     if not os.path.exists(train_data_path) or not os.path.exists(test_data_path):
         train_samples, test_samples = set_train_test_samples(sample_dataset=task_dataset, dev=False, test_size=0.25, split_seed=42, split=True)
@@ -118,6 +117,7 @@ elif args.model == 'TRANS':
             trainset = load(train_data_path)
             print('Loaded preprocessed data with {} samples'.format(len(trainset)))
         else:
+            print('Preprocessing train samples...')
             trainset = MMDataset(train_samples, Tokenizers, dim = 128, device = device, trans_dim=args.pe_dim)
             print('Saving preprocessed data to {}'.format(train_data_path))
             dump(trainset,train_data_path)
@@ -127,6 +127,8 @@ elif args.model == 'TRANS':
             testset = load(test_data_path)
             print('Loaded preprocessed data with {} samples'.format(len(testset)))
         else:
+            print('Preprocessing test samples...')
+            test_samples = time_slice_samples(test_samples, args.time_slice_pct)
             testset = MMDataset(test_samples, Tokenizers, dim = 128, device = device, trans_dim=args.pe_dim)
             print('Saving preprocessed data to {}'.format(test_data_path))
             dump(testset,test_data_path)
@@ -135,9 +137,6 @@ elif args.model == 'TRANS':
         trainset = load(train_data_path)
         testset = load(test_data_path)
         print('Loaded preprocessed data with {} train samples and {} test samples'.format(len(trainset), len(testset)))
-
-        # dump(trainset[:1000], './logs/train_{}_{}_1000.pkl'.format(args.dataset, args.pe_dim))
-        # dump(testset[:250], './logs/test_{}_{}_250.pkl'.format(args.dataset, args.pe_dim))
 
     # trainset, validset, testset = split_dataset(mdataset)
     # train_loader , val_loader, test_loader = mm_dataloader(trainset, validset, testset, batch_size=args.batch_size)
@@ -148,7 +147,7 @@ elif args.model == 'TRANS':
     model = TRANS(Tokenizers, 128, len(task_dataset.get_all_tokens('labels')),
                     device,graph_meta=graph_meta, pe=args.pe_dim)
 
-ckptpath = './logs/trained_{}_{}.ckpt'.format(args.model, args.dataset)    ###
+ckptpath = './logs/trained_{}_{}.ckpt'.format(args.model, args.dataset)
 optimizer =torch.optim.AdamW(model.parameters(), lr = args.lr)
 best = 12345
 pbar = tqdm(range(args.epochs))
@@ -199,7 +198,7 @@ print("Classification Report:\n", report)
 print("Confusion Matrix:\n", conf_matrix)
 
 # Save reports
-result_path = pathlib.Path("./result/{}_{}_{}".format(args.model, args.dataset, args.pe_dim))
+result_path = pathlib.Path("./result/{}_{}_{}_{}".format(args.model, args.dataset, args.pe_dim, args.time_slice_pct))
 result_path.mkdir(parents=True, exist_ok=True)
 with open(result_path / "classification_report.txt", "w") as f:
     f.write("Classification Report:\n")

@@ -26,6 +26,8 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))  # ddx-on-ehr/
 from utils.graph_proc import set_train_test_samples, time_slice_samples
 
+import time
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--epochs', type=int, default=100, help = 'Number of epochs to train.')
 parser.add_argument('--lr', type=float, default = 0.001, help = 'learning rate.')
@@ -129,7 +131,14 @@ elif args.model == 'TRANS':
         else:
             print('Preprocessing test samples...')
             test_samples = time_slice_samples(test_samples, args.time_slice_pct)
+            start_time = time.time()
             testset = MMDataset(test_samples, Tokenizers, dim = 128, device = device, trans_dim=args.pe_dim)
+            end_time = time.time()
+            duration = end_time - start_time
+            event = "Create test graphs"
+            log_message = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {event}: {duration:.6f} seconds\n"
+            with open('logfile.txt', 'a') as f:
+                f.write(log_message)
             print('Saving preprocessed data to {}'.format(test_data_path))
             dump(testset,test_data_path)
     else:
@@ -184,8 +193,31 @@ best_model = torch.load(ckptpath, weights_only=True)    # weights_only=True : �
 model.load_state_dict(best_model, strict=False)     # strict=False : 忽略多餘或缺少的權重
 model = model.to(device)
 
+# Measure model size
+def get_model_size(model):
+    param_size = 0
+    for param in model.parameters():
+        param_size += param.nelement() * param.element_size()
+    buffer_size = 0
+    for buffer in model.buffers():
+        buffer_size += buffer.nelement() * buffer.element_size()
+    size_all_mb = (param_size + buffer_size) / 1024**2
+    return size_all_mb
+
+model_size_mb = get_model_size(model)
+print(f"Model size: {model_size_mb:.2f} MB")
+with open("logfile.txt", "a") as f:
+    f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Model size: {model_size_mb:.2f} MB\n")
+
 y_t_all, y_p_all = [], []
+start_time = time.time()
 y_true, y_pred, y_prob = test(test_loader, model, label_tokenizer)
+end_time = time.time()
+duration = end_time - start_time
+event = "Predict for test graphs"
+log_message = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {event}: {duration:.6f} seconds\n"
+with open('logfile.txt', 'a') as f:
+    f.write(log_message)
 y_true = np.array(y_true)
 y_pred = np.array(y_pred)
 
@@ -212,6 +244,3 @@ plt.xlabel("Predicted")
 plt.ylabel("Actual")
 plt.tight_layout()
 plt.savefig(result_path / "confusion_matrix.png")
-
-# print(code_level(y_true, y_prob))
-# print(visit_level(y_true, y_prob))

@@ -1,0 +1,3 @@
+[2025-06-25 11:17:49] Create test graphs: 7.487129 seconds
+[2025-06-25 11:20:00] Model size: 2.54 MB
+[2025-06-25 11:20:30] Predict for test graphs: 29.192342 seconds

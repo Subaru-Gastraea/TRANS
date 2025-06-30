@@ -45,5 +45,5 @@ class HGT(torch.nn.Module):
         s = get_bounds_from_slice_dict(batch)
         tmp  = get_last_visit_features_from_slices(x_dict['visit'],s)
 
-        return self.lin(tmp)
+        return self.lin(tmp), tmp
     

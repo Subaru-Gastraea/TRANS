@@ -212,7 +212,7 @@ def valid(data_loader, model, label_tokenizer, device):
             val_loss += loss.detach().cpu().numpy()
     return val_loss
 
-def test(data_loader, model, label_tokenizer):
+def test(data_loader, model, label_tokenizer, return_hidden=False):
     y_t_all, y_p_all = [], []
     with torch.no_grad():
         for data in tqdm(data_loader):
@@ -223,7 +223,10 @@ def test(data_loader, model, label_tokenizer):
             else:
                 # label = prepare_labels(data[0]['labels'], label_tokenizer)
                 label = data[0]['labels']
-            out = model(data)
+            if return_hidden:
+                out, combined_feature_np = model(data, return_hidden)
+            else:
+                out = model(data, return_hidden)
             # For multi-label single-choice: use softmax and argmax per label
             y_t = label
             y_p = torch.softmax(out, dim=1).detach().cpu().numpy()
@@ -233,4 +236,8 @@ def test(data_loader, model, label_tokenizer):
         y_prob = np.concatenate(y_p_all, axis=0)
         # For prediction, take argmax for each sample (single label per sample)
         y_pred = np.argmax(y_prob, axis=1)
+
+    if return_hidden:
+        return y_true, y_pred, y_prob, combined_feature_np
+    
     return y_true, y_pred, y_prob

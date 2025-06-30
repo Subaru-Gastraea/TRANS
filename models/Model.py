@@ -126,8 +126,17 @@ class TRANS(nn.Module):
                     graph_list[i]['visit'].x = torch.cat([pe[i].repeat(num_visit, 1), timevec],dim=-1)
         return Batch.from_data_list(graph_list)
     
-    def forward(self, batchdata):
+    def forward(self, batchdata, return_hidden=False):
         seq_logits, Patient_emb = self.process_seq(batchdata[0])
         graph_data = self.process_graph_fea(batchdata[1], Patient_emb).to(self.device)
-        out = self.alpha * self.graphmodel(graph_data.edge_index_dict, graph_data) + (1-self.alpha) * seq_logits
+        graph_out, graph_hidden = self.graphmodel(graph_data.edge_index_dict, graph_data)
+        out = self.alpha * graph_out + (1-self.alpha) * seq_logits
+
+        if return_hidden:
+            # 合併特徵
+            combined_feature = torch.cat([Patient_emb, graph_hidden], dim=1)
+            # 若要做PCA，轉成numpy
+            combined_feature_np = combined_feature.detach().cpu().numpy()
+            return out, combined_feature_np
+        
         return out

@@ -40,6 +40,8 @@ parser.add_argument('--pe_dim', type=int, default = 4, help = 'dimensions of spa
 parser.add_argument('--devm', type=bool, default = False, help = 'develop mode')
 
 parser.add_argument('--time_slice_pct', type=float, default=1.0, help='Percentage of time for slicing test samples')
+parser.add_argument('--output_log', type=bool, default=False, help='Whether to output logs to "logfile.txt" file')
+parser.add_argument('--return_hidden', type=bool, default=False, help='Whether to return hidden features for PCA analysis')
 
 fileroot = {
    'mimic3': 'data path of mimic3',
@@ -55,6 +57,9 @@ torch.cuda.manual_seed(args.seed)
 print('{}--{}'.format(args.dataset, args.model))
 cudaid = "cuda:"+str(args.dev)
 device = torch.device(cudaid if torch.cuda.is_available() else "cpu")
+
+result_path = pathlib.Path("./result/{}_{}_{}_{}".format(args.model, args.dataset, args.pe_dim, args.time_slice_pct))
+result_path.mkdir(parents=True, exist_ok=True)
 
 if args.dataset == 'mimic4':
     # Our preprocessed sample dataset
@@ -137,8 +142,9 @@ elif args.model == 'TRANS':
             duration = end_time - start_time
             event = "Create test graphs"
             log_message = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {event}: {duration:.6f} seconds\n"
-            with open('logfile.txt', 'a') as f:
-                f.write(log_message)
+            if args.output_log:
+                with open('logfile.txt', 'a') as f:
+                    f.write(log_message)
             print('Saving preprocessed data to {}'.format(test_data_path))
             dump(testset,test_data_path)
     else:
@@ -159,12 +165,13 @@ elif args.model == 'TRANS':
 ckptpath = './logs/trained_{}_{}.ckpt'.format(args.model, args.dataset)
 optimizer =torch.optim.AdamW(model.parameters(), lr = args.lr)
 best = 12345
-pbar = tqdm(range(args.epochs))
 
 if os.path.exists(ckptpath):
     print(f"Checkpoint {ckptpath} exists, skipping training.")
 else:
     print(f"Checkpoint {ckptpath} does not exist, starting training.")
+    
+    pbar = tqdm(range(args.epochs))
     for epoch in pbar:
         model = model.to(device)
 
@@ -193,31 +200,43 @@ best_model = torch.load(ckptpath, weights_only=True)    # weights_only=True : �
 model.load_state_dict(best_model, strict=False)     # strict=False : 忽略多餘或缺少的權重
 model = model.to(device)
 
-# Measure model size
-def get_model_size(model):
-    param_size = 0
-    for param in model.parameters():
-        param_size += param.nelement() * param.element_size()
-    buffer_size = 0
-    for buffer in model.buffers():
-        buffer_size += buffer.nelement() * buffer.element_size()
-    size_all_mb = (param_size + buffer_size) / 1024**2
-    return size_all_mb
+if args.output_log:
+    # Measure model size
+    def get_model_size(model):
+        param_size = 0
+        for param in model.parameters():
+            param_size += param.nelement() * param.element_size()
+        buffer_size = 0
+        for buffer in model.buffers():
+            buffer_size += buffer.nelement() * buffer.element_size()
+        size_all_mb = (param_size + buffer_size) / 1024**2
+        return size_all_mb
 
-model_size_mb = get_model_size(model)
-print(f"Model size: {model_size_mb:.2f} MB")
-with open("logfile.txt", "a") as f:
-    f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Model size: {model_size_mb:.2f} MB\n")
+    model_size_mb = get_model_size(model)
+    print(f"Model size: {model_size_mb:.2f} MB")
+    with open("logfile.txt", "a") as f:
+        f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Model size: {model_size_mb:.2f} MB\n")
 
 y_t_all, y_p_all = [], []
 start_time = time.time()
-y_true, y_pred, y_prob = test(test_loader, model, label_tokenizer)
+if args.return_hidden:
+    y_true, y_pred, y_prob, combined_feature_np = test(test_loader, model, label_tokenizer, args.return_hidden)
+    # Save results for later PCA analysis
+    np.save(result_path / "test_outputs.npy", {
+        "combined_feature": combined_feature_np,
+        "y_true": y_true,
+        "y_pred": y_pred,
+        "y_prob": y_prob
+    })
+else:
+    y_true, y_pred, y_prob = test(test_loader, model, label_tokenizer, args.return_hidden)
 end_time = time.time()
 duration = end_time - start_time
 event = "Predict for test graphs"
 log_message = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {event}: {duration:.6f} seconds\n"
-with open('logfile.txt', 'a') as f:
-    f.write(log_message)
+if args.output_log:
+    with open('logfile.txt', 'a') as f:
+        f.write(log_message)
 y_true = np.array(y_true)
 y_pred = np.array(y_pred)
 
@@ -230,8 +249,6 @@ print("Classification Report:\n", report)
 print("Confusion Matrix:\n", conf_matrix)
 
 # Save reports
-result_path = pathlib.Path("./result/{}_{}_{}_{}".format(args.model, args.dataset, args.pe_dim, args.time_slice_pct))
-result_path.mkdir(parents=True, exist_ok=True)
 with open(result_path / "classification_report.txt", "w") as f:
     f.write("Classification Report:\n")
     f.write(report)

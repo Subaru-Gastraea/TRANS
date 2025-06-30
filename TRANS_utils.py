@@ -214,6 +214,7 @@ def valid(data_loader, model, label_tokenizer, device):
 
 def test(data_loader, model, label_tokenizer, return_hidden=False):
     y_t_all, y_p_all = [], []
+    combined_feature_np = None
     with torch.no_grad():
         for data in tqdm(data_loader):
             model.eval()
@@ -224,7 +225,12 @@ def test(data_loader, model, label_tokenizer, return_hidden=False):
                 # label = prepare_labels(data[0]['labels'], label_tokenizer)
                 label = data[0]['labels']
             if return_hidden:
-                out, combined_feature_np = model(data, return_hidden)
+                out, combined_feature = model(data, return_hidden)
+                # Collect each batch's combined_feature_np
+                if combined_feature_np is None:
+                    combined_feature_np = combined_feature
+                else:
+                    combined_feature_np = np.concatenate((combined_feature_np, combined_feature), axis=0)
             else:
                 out = model(data, return_hidden)
             # For multi-label single-choice: use softmax and argmax per label

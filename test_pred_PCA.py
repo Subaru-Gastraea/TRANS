@@ -1,16 +1,7 @@
 import os
-from tqdm import *
-import random
 import argparse
 import numpy as np
-import torch
-from TRANS_utils import *
-from data.Task import *
-from models.Model import *
-from models.baselines import *
-
 import pathlib
-
 import sys
 
 # Add the parent directory to sys.path
@@ -19,34 +10,14 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')
 from utils.PCA_analysis import plot_PCA_3D
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--epochs', type=int, default=100, help = 'Number of epochs to train.')
-parser.add_argument('--lr', type=float, default = 0.001, help = 'learning rate.')
 parser.add_argument('--model', type=str, default="TRANS", help = 'Transformer, RETAIN, StageNet, KAME, GCT, DDHGNN, TRANS')
-parser.add_argument('--dev', type=int, default = 0, help = 'GPU device id')
-parser.add_argument('--seed', type=int, default = 42)
 parser.add_argument('--dataset', type=str, default = "mimic3", choices=['mimic3', 'mimic4', 'ccae'])
-parser.add_argument('--batch_size', type=int, default = 128)
 parser.add_argument('--pe_dim', type=int, default = 4, help = 'dimensions of spatial encoding')
-parser.add_argument('--devm', type=bool, default = False, help = 'develop mode')
-
 parser.add_argument('--time_slice_pct', type=float, default=1.0, help='Percentage of time for slicing test samples')
-parser.add_argument('--output_log', type=bool, default=False, help='Whether to output logs to "logfile.txt" file')
-parser.add_argument('--return_hidden', type=bool, default=False, help='Whether to return hidden features for PCA analysis')
-
-fileroot = {
-   'mimic3': 'data path of mimic3',
-   'mimic4': 'data path of mimic4',
-   'ccae': './data/processed_dip.pkl'
-}
 
 args = parser.parse_args()
-random.seed(args.seed)
-np.random.seed(args.seed)
-torch.manual_seed(args.seed)
-torch.cuda.manual_seed(args.seed)
+
 print('{}--{}'.format(args.dataset, args.model))
-cudaid = "cuda:"+str(args.dev)
-device = torch.device(cudaid if torch.cuda.is_available() else "cpu")
 
 result_path = pathlib.Path("./result/{}_{}_{}_{}".format(args.model, args.dataset, args.pe_dim, args.time_slice_pct))
 result_path.mkdir(parents=True, exist_ok=True)

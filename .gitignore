@@ -169,3 +169,6 @@ cython_debug/
 
 # logs
 logs/
+
+# feature vectors
+result/*/*.npy

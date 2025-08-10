@@ -240,6 +240,21 @@ if args.output_log:
 y_true = np.array(y_true)
 y_pred = np.array(y_pred)
 
+## top-k prediction
+k = 3  # top-k
+# y_prob: (num_samples, num_classes)
+topk_preds = np.argsort(y_prob, axis=1)[:, -k:]  # 每一列取出機率最高的 k 個類別
+
+# y_true: (num_samples,)
+topk_correct = [y_true[i] in topk_preds[i] for i in range(len(y_true))]
+# 轉成 0/1
+topk_pred = np.array(topk_correct, dtype=int)
+
+topk_accuracy = np.mean(topk_pred)
+print(f"Top-{k} accuracy: {topk_accuracy:.4f}\n")
+
+##
+
 labels = task_dataset.get_all_tokens('labels')
 
 report = classification_report(y_true, y_pred, labels=labels, digits=4, zero_division=0)

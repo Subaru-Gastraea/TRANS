@@ -70,15 +70,10 @@ if args.dataset == 'mimic4':
         with open(sample_dataset_path, 'rb') as f:
             task_dataset = pickle.load(f)
 
-#    task_dataset = load_dataset(args.dataset, root = fileroot[args.dataset], task_fn=diag_prediction_mimic4_fn, dev= args.devm)
 elif args.dataset == 'mimic3':
    task_dataset = load_dataset(args.dataset, root = fileroot[args.dataset], task_fn=diag_prediction_mimic3_fn, dev= args.devm)
 else:
     task_dataset = load_dataset(args.dataset, root = fileroot[args.dataset])
-
-# print(task_dataset.input_info)
-# print(task_dataset.samples[0]['lab_itemid'])
-# exit()
 
 # Overwrite the input_info to fix task_dataset.get_all_tokens()
 task_dataset.input_info['lab_itemid']['type'] = str
@@ -88,9 +83,6 @@ for sample in task_dataset.samples:
     sample['labels'] = sample['labels'].index(1)
 task_dataset.input_info['labels']['type'] = str
 task_dataset.input_info['labels']['dim'] = 0     
-
-# print(task_dataset.input_info)
-# exit()
 
 Tokenizers = get_init_tokenizers(task_dataset, keys=['lab_itemid'])
 label_tokenizer = Tokenizer(tokens=task_dataset.get_all_tokens('labels'))
@@ -153,11 +145,7 @@ elif args.model == 'TRANS':
         testset = load(test_data_path)
         print('Loaded preprocessed data with {} train samples and {} test samples'.format(len(trainset), len(testset)))
 
-    # trainset, validset, testset = split_dataset(mdataset)
-    # train_loader , val_loader, test_loader = mm_dataloader(trainset, validset, testset, batch_size=args.batch_size)
     train_loader, test_loader = mm_dataloader(trainset, testset, batch_size=args.batch_size)
-
-    # print('task_dataset.get_all_tokens("labels"):', task_dataset.get_all_tokens('labels'))
     
     model = TRANS(Tokenizers, 128, len(task_dataset.get_all_tokens('labels')),
                     device,graph_meta=graph_meta, pe=args.pe_dim)
@@ -176,11 +164,6 @@ else:
         model = model.to(device)
 
         train_loss = train(train_loader, model, label_tokenizer, optimizer, device)
-        # val_loss = valid(val_loader, model, label_tokenizer, device)
-
-        # pbar.set_description(f"Epoch {epoch + 1}/{args.epochs} - train loss: {train_loss:.2f} - valid loss: {val_loss:.2f}")
-        # if val_loss<best:
-        #     torch.save(model.state_dict(), ckptpath)
 
         pbar.set_description(f"Epoch {epoch + 1}/{args.epochs} - train loss: {train_loss:.2f}")
         if train_loss<best:
